@@ -12,7 +12,9 @@ let workerConfigured = false;
 function ensureWorker() {
   if (workerConfigured) return;
   // Served from /public; version matches the installed pdfjs-dist (see plan).
-  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+  // Prefix with the base path so it resolves under a project page (/Velin/).
+  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  pdfjs.GlobalWorkerOptions.workerSrc = `${base}/pdf.worker.min.mjs`;
   workerConfigured = true;
 }
 
