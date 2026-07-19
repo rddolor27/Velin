@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Velin
 
-## Getting Started
+Edit PDFs right in your browser. Nothing ever leaves your device.
 
-First, run the development server:
+Velin is a client-side PDF editor. Every operation — removing pages, adding
+text, signing, drawing — runs entirely in your browser. No uploads, no servers,
+no accounts. The file you open never touches a network.
+
+## Features
+
+- **Organize pages** — remove, reorder (drag), rotate, and extract pages.
+- **Add text** — click anywhere to type, with font, size, and color controls.
+- **Sign** — draw a signature or upload an image; reuse saved signatures.
+- **Draw** — freehand pen with color and stroke-width options.
+- **Export** — download your edited PDF, flattened and ready to share.
+- **Private by design** — 100% client-side. Your document stays on your machine.
+
+## Tech
+
+- [Next.js](https://nextjs.org) (App Router) + TypeScript
+- [Tailwind CSS](https://tailwindcss.com) + [shadcn/ui](https://ui.shadcn.com)
+- [PDF.js](https://mozilla.github.io/pdf.js/) for rendering, [pdf-lib](https://pdf-lib.js.org) for writing
+- [Zustand](https://zustand-demo.pmnd.rs) for state, [Vitest](https://vitest.dev) for tests
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open the local URL printed in the terminal.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm dev     # start the dev server
+pnpm build   # production build
+pnpm test    # run the test suite
+pnpm lint    # lint
+```
 
-## Learn More
+## How it works
 
-To learn more about Next.js, take a look at the following resources:
+PDF.js renders each page to a canvas for display. Edits are kept as an
+annotation layer (text, signatures, ink) in points relative to the unrotated
+page, so zoom and rotation never mutate stored data. On export, pdf-lib copies
+the retained pages in order, applies rotation, and draws the annotations —
+producing a fresh PDF entirely in the browser.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## License
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
