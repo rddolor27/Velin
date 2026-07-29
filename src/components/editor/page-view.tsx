@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { displaySize, pageToScreen, screenToPage, type Point } from "@/lib/coords";
+import { strokePath } from "@/lib/ink";
 import { renderPageToCanvas } from "@/lib/pdf/render";
 import type { InkAnnotation, PageEntry, SignatureAnnotation, TextAnnotation } from "@/lib/types";
 import { newId, useEditorStore } from "@/store/editor-store";
 import { useToolSettings } from "@/store/tool-settings";
 import { usePdf } from "./pdf-context";
-import { AnnotationLayer, strokePath } from "./annotation-layer";
+import { AnnotationLayer } from "./annotation-layer";
 
 const SIGNATURE_WIDTH = 160; // points
 

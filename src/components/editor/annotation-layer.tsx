@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import getStroke from "perfect-freehand";
 
 import { pageToScreen, screenToPage, type Point } from "@/lib/coords";
+import { strokePath } from "@/lib/ink";
 import { LINE_HEIGHT } from "@/lib/text-metrics";
 import { cn } from "@/lib/utils";
 import type {
@@ -313,14 +313,5 @@ function InkItem({
         <path d={d} fill={ann.color} />
       </svg>
     </div>
-  );
-}
-
-/** perfect-freehand outline -> SVG path data. */
-export function strokePath(points: number[][], size: number): string {
-  const outline = getStroke(points, { size: Math.max(1, size), thinning: 0.6, streamline: 0.5 });
-  if (outline.length === 0) return "";
-  return (
-    outline.reduce((acc, [x, y], i) => acc + (i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`), "") + " Z"
   );
 }
