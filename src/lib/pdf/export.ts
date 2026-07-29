@@ -6,10 +6,12 @@ import {
   degrees,
   rgb,
   type PDFFont,
+  type PDFPage,
   type RGB,
 } from "pdf-lib";
 
 import { pageToPdf } from "@/lib/coords";
+import { strokePath } from "@/lib/ink";
 import { BASELINE_RATIO, LINE_HEIGHT } from "@/lib/text-metrics";
 import type { Annotation, PageEntry, StandardFontKey } from "@/lib/types";
 
@@ -78,6 +80,71 @@ export function wrapText(text: string, font: PDFFont, size: number, maxWidth: nu
   return lines;
 }
 
+/** Read an Info-dict field, tolerating a malformed one rather than failing the save. */
+function read<T>(get: () => T | undefined): T | undefined {
+  try {
+    return get();
+  } catch {
+    return undefined;
+  }
+}
+
+/** A rebuild starts with an empty Info dict, so move the source's across field by field. */
+function carryOverMetadata(src: PDFDocument, out: PDFDocument) {
+  const title = read(() => src.getTitle());
+  const author = read(() => src.getAuthor());
+  const subject = read(() => src.getSubject());
+  const keywords = read(() => src.getKeywords());
+  const creator = read(() => src.getCreator());
+  const producer = read(() => src.getProducer());
+  const created = read(() => src.getCreationDate());
+  const modified = read(() => src.getModificationDate());
+
+  if (title !== undefined) out.setTitle(title);
+  if (author !== undefined) out.setAuthor(author);
+  if (subject !== undefined) out.setSubject(subject);
+  // getKeywords returns the raw string; a single-element array round-trips it verbatim.
+  if (keywords !== undefined) out.setKeywords([keywords]);
+  if (creator !== undefined) out.setCreator(creator);
+  if (producer !== undefined) out.setProducer(producer);
+  if (created !== undefined) out.setCreationDate(created);
+  if (modified !== undefined) out.setModificationDate(modified);
+}
+
+/**
+ * Re-arrange the source document's own page tree instead of copying pages into a
+ * new document. Page content is untouched, and everything that lives in the
+ * document catalog — bookmarks, form fields, tagging, layers, XMP metadata —
+ * survives, because the catalog is never rebuilt.
+ */
+function reorderInPlace(doc: PDFDocument, chosen: PageEntry[]): PDFPage[] {
+  const bySourceIndex = doc.getPages();
+  const target = chosen.map((entry) => bySourceIndex[entry.sourceIndex]);
+  if (target.some((page) => !page)) throw new Error("Page list doesn't match the source PDF.");
+
+  // Detaching a page leaves its objects registered in the document, so removing
+  // then re-adding only rewrites the page tree's order.
+  if (!chosen.every((entry, i) => entry.sourceIndex === i)) {
+    for (let i = doc.getPageCount() - 1; i >= 0; i--) doc.removePage(i);
+    for (const page of target) doc.addPage(page);
+  }
+  return target;
+}
+
+/**
+ * Copy the kept pages into a fresh document. Only used when pages were dropped:
+ * editing in place would leave a removed page's content sitting in the file, so
+ * deleting and extracting have to rebuild to actually leave that data behind.
+ * The kept pages are still copied verbatim — images and fonts aren't re-encoded.
+ */
+async function copyChosen(src: PDFDocument, chosen: PageEntry[]) {
+  const doc = await PDFDocument.create({ updateMetadata: false });
+  const target = await doc.copyPages(src, chosen.map((p) => p.sourceIndex));
+  for (const page of target) doc.addPage(page);
+  carryOverMetadata(src, doc);
+  return { doc, target };
+}
+
 export interface ExportInput {
   sourceBytes: ArrayBuffer;
   pages: PageEntry[];
@@ -93,18 +160,29 @@ export async function exportPdf({
   annotations,
   pageSubset,
 }: ExportInput): Promise<Uint8Array> {
-  const src = await PDFDocument.load(sourceBytes.slice(0));
-  const out = await PDFDocument.create();
+  // updateMetadata:false keeps the source's own Info dictionary — the default
+  // stamps pdf-lib as the producer and overwrites the modification date.
+  const src = await PDFDocument.load(sourceBytes.slice(0), { updateMetadata: false });
 
   const chosen = pageSubset ? pages.filter((p) => pageSubset.includes(p.id)) : pages;
   if (chosen.length === 0) throw new Error("No pages to export.");
 
-  const copied = await out.copyPages(src, chosen.map((p) => p.sourceIndex));
+  // Editing the source in place preserves everything a rebuild would drop, but a
+  // rebuild is the only way to discard a removed page's content — so rebuild
+  // exactly when the export isn't a permutation of every source page.
+  const keepsEveryPage =
+    chosen.length === src.getPageCount() &&
+    new Set(chosen.map((p) => p.sourceIndex)).size === chosen.length;
+
+  const { doc, target } = keepsEveryPage
+    ? { doc: src, target: reorderInPlace(src, chosen) }
+    : await copyChosen(src, chosen);
+
   const fontCache = new Map<StandardFontKey, PDFFont>();
   const getFont = async (key: StandardFontKey) => {
     let font = fontCache.get(key);
     if (!font) {
-      font = await out.embedFont(FONT_MAP[key]);
+      font = await doc.embedFont(FONT_MAP[key]);
       fontCache.set(key, font);
     }
     return font;
@@ -112,8 +190,7 @@ export async function exportPdf({
 
   for (let i = 0; i < chosen.length; i++) {
     const entry = chosen[i];
-    const page = copied[i];
-    out.addPage(page);
+    const page = target[i];
     page.setRotation(degrees(entry.rotation));
 
     // Draw relative to the page's own box (origin + height), not an assumed
@@ -140,31 +217,30 @@ export async function exportPdf({
         });
       } else if (a.kind === "signature") {
         const { bytes, mime } = dataUrlToBytes(a.dataUrl);
+        // embedJpg passes the original JPEG through untouched; embedPng re-packs
+        // the pixels with Flate. Either way nothing is resampled or re-compressed.
         const img = mime.includes("png")
-          ? await out.embedPng(bytes)
-          : await out.embedJpg(bytes);
+          ? await doc.embedPng(bytes)
+          : await doc.embedJpg(bytes);
         const { x, y } = pageToPdf({ x: a.x, y: a.y }, pageHeight, a.height, origin);
         page.drawImage(img, { x, y, width: a.width, height: a.height });
       } else if (a.kind === "ink") {
-        const color = hexToRgb(a.color);
-        for (let p = 1; p < a.points.length; p++) {
-          const s = a.points[p - 1];
-          const e = a.points[p];
-          const start = pageToPdf({ x: a.x + s.x, y: a.y + s.y }, pageHeight, 0, origin);
-          const end = pageToPdf({ x: a.x + e.x, y: a.y + e.y }, pageHeight, 0, origin);
-          page.drawLine({
-            start,
-            end,
-            thickness: a.size,
-            color,
-            lineCap: 1, // round
-          });
+        // Fill the same perfect-freehand outline the editor draws rather than
+        // stitching uniform-width segments, so the saved stroke keeps its taper.
+        const d = strokePath(a.points.map((p) => [p.x, p.y]), a.size);
+        if (d) {
+          // drawSvgPath translates to (x, y) then flips the y-axis, so the path's
+          // own top-left-origin coordinates line up with page space as-is.
+          const { x, y } = pageToPdf({ x: a.x, y: a.y }, pageHeight, 0, origin);
+          page.drawSvgPath(d, { x, y, color: hexToRgb(a.color) });
         }
       }
     }
   }
 
-  return out.save();
+  // Field appearances are left alone: regenerating them would re-render a filled
+  // form's text with pdf-lib's default font instead of the one the PDF ships.
+  return doc.save({ updateFieldAppearances: false });
 }
 
 /** Trigger a browser download for exported bytes. */
