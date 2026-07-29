@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, StandardFonts } from "pdf-lib";
 
-import { exportPdf } from "./export";
+import { exportPdf, wrapText } from "./export";
 import type { Annotation, PageEntry } from "@/lib/types";
 
 /** Build a 3-page source PDF and return its bytes as an ArrayBuffer. */
@@ -84,6 +84,22 @@ describe("exportPdf", () => {
     const reloaded = await PDFDocument.load(bytes);
     expect(reloaded.getPageCount()).toBe(1);
     expect(bytes.length).toBeGreaterThan(200);
+  });
+
+  it("wraps text to the box width", async () => {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+
+    expect(wrapText("hello world", font, 12, 500)).toEqual(["hello world"]);
+
+    const narrow = wrapText("hello world foo bar baz", font, 12, 40);
+    expect(narrow.length).toBeGreaterThan(1);
+
+    const broken = wrapText("supercalifragilistic", font, 12, 30);
+    expect(broken.length).toBeGreaterThan(1);
+    expect(broken.join("")).toBe("supercalifragilistic");
+
+    expect(wrapText("", font, 12, 100)).toEqual([""]);
   });
 
   it("throws when nothing is selected to export", async () => {
