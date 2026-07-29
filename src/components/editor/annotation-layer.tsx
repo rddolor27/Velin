@@ -24,6 +24,22 @@ const FONT_CSS: Record<string, string> = {
   Courier: "'Courier New', Courier, monospace",
 };
 
+let measureCtx: CanvasRenderingContext2D | null = null;
+
+/**
+ * Width (in PDF points) of the widest line of text at the given size. Font size
+ * in px equals points at zoom 1, so measuring at `size` px yields points.
+ */
+function measureTextWidth(text: string, size: number, cssFamily: string): number {
+  if (typeof document === "undefined") return size * 4;
+  measureCtx ??= document.createElement("canvas").getContext("2d");
+  if (!measureCtx) return size * 4;
+  measureCtx.font = `${size}px ${cssFamily}`;
+  let max = 0;
+  for (const line of text.split("\n")) max = Math.max(max, measureCtx.measureText(line).width);
+  return max;
+}
+
 /** Pointer position in page space (top-left, points), correct for any rotation. */
 function pointerToPage(e: { clientX: number; clientY: number }, host: HTMLElement, page: PageEntry, zoom: number): Point {
   const rect = host.getBoundingClientRect();
@@ -142,16 +158,28 @@ function TextItem({
     return () => window.clearTimeout(id);
   }, [editing]);
 
+  const cssFamily = FONT_CSS[ann.fontFamily];
   const lineHeight = ann.size * LINE_HEIGHT * zoom;
 
-  // Drag the corner to scale the whole text box — width and font size together,
-  // so the block grows uniformly (like resizing an image).
+  // Auto-size the box to its content so text never wraps: the box grows as you
+  // type, and Enter is the only thing that starts a new line. A little trailing
+  // room keeps the caret and outline off the last glyph.
+  useEffect(() => {
+    const width = Math.max(ann.size, measureTextWidth(ann.text, ann.size, cssFamily)) + ann.size * 0.3;
+    if (Math.abs(width - ann.width) > 0.5) {
+      updateAnnotation(page.id, ann.id, { width });
+    }
+  }, [ann.text, ann.size, ann.width, cssFamily, page.id, ann.id, updateAnnotation]);
+
+  // Drag the corner to scale the font size (the box auto-follows the content).
   const onResize = (e: React.PointerEvent) => {
     e.stopPropagation();
     const host = hostRef.current;
     if (!host) return;
-    const startWidth = ann.width;
     const startSize = ann.size;
+    const anchor = { x: ann.x, y: ann.y };
+    const start = pointerToPage(e, host, page, zoom);
+    const startDist = Math.max(8, Math.hypot(start.x - anchor.x, start.y - anchor.y));
     let started = false;
     (e.target as Element).setPointerCapture?.(e.pointerId);
     const onMove = (ev: PointerEvent) => {
@@ -160,9 +188,9 @@ function TextItem({
         started = true;
       }
       const p = pointerToPage(ev, host, page, zoom);
-      const width = Math.max(24, p.x - ann.x);
-      const size = Math.min(200, Math.max(6, (startSize * width) / startWidth));
-      updateAnnotation(page.id, ann.id, { width, size });
+      const dist = Math.hypot(p.x - anchor.x, p.y - anchor.y);
+      const size = Math.min(200, Math.max(6, (startSize * dist) / startDist));
+      updateAnnotation(page.id, ann.id, { size });
     };
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
@@ -196,11 +224,13 @@ function TextItem({
             }
           }}
           onFocus={() => beginHistory()}
+          wrap="off"
           style={{
             fontSize: ann.size * zoom,
             lineHeight: `${lineHeight}px`,
             color: ann.color,
             fontFamily: FONT_CSS[ann.fontFamily],
+            whiteSpace: "pre",
           }}
           className="block w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none"
           rows={Math.max(1, ann.text.split("\n").length)}
@@ -213,7 +243,7 @@ function TextItem({
             color: ann.color,
             fontFamily: FONT_CSS[ann.fontFamily],
           }}
-          className="cursor-move whitespace-pre-wrap break-words"
+          className="cursor-move whitespace-pre"
         >
           {ann.text}
         </div>
