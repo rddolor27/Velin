@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import getStroke from "perfect-freehand";
 
 import { pageToScreen, screenToPage, type Point } from "@/lib/coords";
+import { LINE_HEIGHT } from "@/lib/text-metrics";
 import { cn } from "@/lib/utils";
 import type {
   Annotation,
@@ -141,7 +142,7 @@ function TextItem({
     return () => window.clearTimeout(id);
   }, [editing]);
 
-  const lineHeight = ann.size * 1.2 * zoom;
+  const lineHeight = ann.size * LINE_HEIGHT * zoom;
 
   return (
     <div

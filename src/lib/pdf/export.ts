@@ -10,6 +10,7 @@ import {
 } from "pdf-lib";
 
 import { pageToPdf } from "@/lib/coords";
+import { BASELINE_RATIO, LINE_HEIGHT } from "@/lib/text-metrics";
 import type { Annotation, PageEntry, StandardFontKey } from "@/lib/types";
 
 const FONT_MAP: Record<StandardFontKey, StandardFonts> = {
@@ -89,10 +90,12 @@ export async function exportPdf({
       if (a.kind === "text") {
         const font = await getFont(a.fontFamily);
         const lines = a.text.split("\n");
-        const lineHeight = a.size * 1.2;
+        const lineHeight = a.size * LINE_HEIGHT;
         lines.forEach((line, li) => {
           const yTop = a.y + li * lineHeight;
-          const { x, y } = pageToPdf({ x: a.x, y: yTop }, pageHeight, a.size, origin);
+          // Baseline sits BASELINE_RATIO of the font size below the line's top,
+          // matching where the browser places it inside a line-height box on screen.
+          const { x, y } = pageToPdf({ x: a.x, y: yTop }, pageHeight, a.size * BASELINE_RATIO, origin);
           page.drawText(line, { x, y, size: a.size, font, color: hexToRgb(a.color) });
         });
       } else if (a.kind === "signature") {
