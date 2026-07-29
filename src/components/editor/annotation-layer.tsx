@@ -144,6 +144,34 @@ function TextItem({
 
   const lineHeight = ann.size * LINE_HEIGHT * zoom;
 
+  // Drag the corner to scale the whole text box — width and font size together,
+  // so the block grows uniformly (like resizing an image).
+  const onResize = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    const host = hostRef.current;
+    if (!host) return;
+    const startWidth = ann.width;
+    const startSize = ann.size;
+    let started = false;
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    const onMove = (ev: PointerEvent) => {
+      if (!started) {
+        beginHistory();
+        started = true;
+      }
+      const p = pointerToPage(ev, host, page, zoom);
+      const width = Math.max(24, p.x - ann.x);
+      const size = Math.min(200, Math.max(6, (startSize * width) / startWidth));
+      updateAnnotation(page.id, ann.id, { width, size });
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   return (
     <div
       style={{ ...itemStyle(ann, page, zoom), width: ann.width * zoom }}
@@ -189,6 +217,12 @@ function TextItem({
         >
           {ann.text}
         </div>
+      )}
+      {selected && !editing && (
+        <span
+          onPointerDown={onResize}
+          className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-se-resize rounded-sm border border-background bg-brand"
+        />
       )}
     </div>
   );
