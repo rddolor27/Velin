@@ -96,7 +96,7 @@ function InteractiveLayer({
         size: textSize,
         color: textColor,
         fontFamily: textFont,
-        width: textSize, // auto-grows to fit content once mounted
+        width: 220, // starting box width; drag the side handle to widen
       };
       // Switch tool first — setTool clears the selection, so add the annotation
       // afterwards or it gets deselected the instant it's created.
