@@ -41,6 +41,43 @@ function dataUrlToBytes(dataUrl: string): { bytes: Uint8Array; mime: string } {
   return { bytes, mime };
 }
 
+/**
+ * Greedy word-wrap to `maxWidth`, breaking over-long words by character so a
+ * narrow text box saves with the same line breaks it shows on screen. An empty
+ * paragraph yields one empty line so vertical spacing matches.
+ */
+export function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const fits = (s: string) => s === "" || font.widthOfTextAtSize(s, size) <= maxWidth;
+  const lines: string[] = [];
+  let line = "";
+
+  for (const word of text.split(" ")) {
+    const candidate = line === "" ? word : `${line} ${word}`;
+    if (fits(candidate)) {
+      line = candidate;
+      continue;
+    }
+    if (line !== "") {
+      lines.push(line);
+      line = "";
+    }
+    if (fits(word)) {
+      line = word;
+    } else {
+      let chunk = word;
+      while (!fits(chunk) && chunk.length > 1) {
+        let i = 1;
+        while (i < chunk.length && fits(chunk.slice(0, i + 1))) i++;
+        lines.push(chunk.slice(0, i));
+        chunk = chunk.slice(i);
+      }
+      line = chunk;
+    }
+  }
+  lines.push(line);
+  return lines;
+}
+
 export interface ExportInput {
   sourceBytes: ArrayBuffer;
   pages: PageEntry[];
@@ -89,9 +126,13 @@ export async function exportPdf({
     for (const a of items) {
       if (a.kind === "text") {
         const font = await getFont(a.fontFamily);
-        const lines = a.text.split("\n");
         const lineHeight = a.size * LINE_HEIGHT;
-        lines.forEach((line, li) => {
+        // Wrap each paragraph to the box width, matching the on-screen box so a
+        // resized/narrow box saves with the same line breaks the user sees.
+        const wrapped = a.text
+          .split("\n")
+          .flatMap((para) => wrapText(para, font, a.size, a.width));
+        wrapped.forEach((line, li) => {
           const yTop = a.y + li * lineHeight;
           // Baseline sits BASELINE_RATIO of the font size below the line's top,
           // matching where the browser places it inside a line-height box on screen.
