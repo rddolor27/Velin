@@ -96,4 +96,10 @@ describe("pageToPdf flips the y-axis", () => {
     // A 20pt-tall box whose top is at y=0 should sit with its bottom at y=180.
     expect(pageToPdf({ x: 10, y: 0 }, H, 20)).toEqual({ x: 10, y: 180 });
   });
+
+  it("shifts by the page box origin (cropped / offset MediaBox)", () => {
+    // Box origin (30, 40): the same top-left point must land 30 right and,
+    // after the y-flip, 40 up from the origin-0 result.
+    expect(pageToPdf({ x: 10, y: 0 }, H, 0, { x: 30, y: 40 })).toEqual({ x: 40, y: 240 });
+  });
 });

@@ -88,7 +88,16 @@ export function screenToPage(pt: Point, page: PageGeometry, zoom: number): Point
  * Rotation is NOT applied here — pdf-lib's `setRotation` handles it, and drawing
  * occurs in the unrotated system. `boxHeight` shifts a top-anchored box (text
  * line, image) down to its bottom edge so pdf-lib's bottom-left anchor lands right.
+ *
+ * `origin` is the page box's lower-left corner (CropBox/MediaBox x/y). It's
+ * usually (0, 0), but pages that are cropped or whose MediaBox doesn't start at
+ * the origin need it, or annotations land shifted by that offset on export.
  */
-export function pageToPdf(pt: Point, pageHeight: number, boxHeight = 0): Point {
-  return { x: pt.x, y: pageHeight - pt.y - boxHeight };
+export function pageToPdf(
+  pt: Point,
+  pageHeight: number,
+  boxHeight = 0,
+  origin: Point = { x: 0, y: 0 },
+): Point {
+  return { x: origin.x + pt.x, y: origin.y + pageHeight - pt.y - boxHeight };
 }

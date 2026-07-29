@@ -78,6 +78,12 @@ export async function exportPdf({
     out.addPage(page);
     page.setRotation(degrees(entry.rotation));
 
+    // Draw relative to the page's own box (origin + height), not an assumed
+    // (0,0)-origin page — otherwise annotations shift on cropped/offset pages.
+    const box = page.getCropBox();
+    const origin = { x: box.x, y: box.y };
+    const pageHeight = box.height;
+
     const items = annotations[entry.id] ?? [];
     for (const a of items) {
       if (a.kind === "text") {
@@ -86,7 +92,7 @@ export async function exportPdf({
         const lineHeight = a.size * 1.2;
         lines.forEach((line, li) => {
           const yTop = a.y + li * lineHeight;
-          const { x, y } = pageToPdf({ x: a.x, y: yTop }, entry.height, a.size);
+          const { x, y } = pageToPdf({ x: a.x, y: yTop }, pageHeight, a.size, origin);
           page.drawText(line, { x, y, size: a.size, font, color: hexToRgb(a.color) });
         });
       } else if (a.kind === "signature") {
@@ -94,15 +100,15 @@ export async function exportPdf({
         const img = mime.includes("png")
           ? await out.embedPng(bytes)
           : await out.embedJpg(bytes);
-        const { x, y } = pageToPdf({ x: a.x, y: a.y }, entry.height, a.height);
+        const { x, y } = pageToPdf({ x: a.x, y: a.y }, pageHeight, a.height, origin);
         page.drawImage(img, { x, y, width: a.width, height: a.height });
       } else if (a.kind === "ink") {
         const color = hexToRgb(a.color);
         for (let p = 1; p < a.points.length; p++) {
           const s = a.points[p - 1];
           const e = a.points[p];
-          const start = pageToPdf({ x: a.x + s.x, y: a.y + s.y }, entry.height);
-          const end = pageToPdf({ x: a.x + e.x, y: a.y + e.y }, entry.height);
+          const start = pageToPdf({ x: a.x + s.x, y: a.y + s.y }, pageHeight, 0, origin);
+          const end = pageToPdf({ x: a.x + e.x, y: a.y + e.y }, pageHeight, 0, origin);
           page.drawLine({
             start,
             end,
