@@ -84,6 +84,13 @@ export function SignatureDialog({ open, onOpenChange }: Props) {
   );
 }
 
+// The pad is captured at several times its on-screen size: a signature placed at
+// the default 160pt width then carries ~750 DPI of detail, so it stays sharp when
+// resized up or printed instead of being pinned to the preview's resolution.
+const PAD_SCALE = 3;
+const PAD_WIDTH = 560 * PAD_SCALE;
+const PAD_HEIGHT = 220 * PAD_SCALE;
+
 function DrawPad({ onDone }: { onDone: (url: string, aspect: number) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
@@ -106,7 +113,7 @@ function DrawPad({ onDone }: { onDone: (url: string, aspect: number) => void }) 
     if (!drawing.current) return;
     const ctx = canvasRef.current!.getContext("2d")!;
     ctx.strokeStyle = "#111827";
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 2.5 * PAD_SCALE; // same apparent thickness at the larger backing size
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     const { x, y } = pos(e);
@@ -128,8 +135,8 @@ function DrawPad({ onDone }: { onDone: (url: string, aspect: number) => void }) 
     <div className="space-y-3 py-2">
       <canvas
         ref={canvasRef}
-        width={560}
-        height={220}
+        width={PAD_WIDTH}
+        height={PAD_HEIGHT}
         onPointerDown={start}
         onPointerMove={move}
         onPointerUp={end}

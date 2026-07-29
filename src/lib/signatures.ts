@@ -16,7 +16,12 @@ export function loadSavedSignatures(): SavedSignature[] {
 
 export function saveSignature(sig: SavedSignature): SavedSignature[] {
   const all = [sig, ...loadSavedSignatures()].slice(0, 12);
-  window.localStorage.setItem(KEY, JSON.stringify(all));
+  try {
+    window.localStorage.setItem(KEY, JSON.stringify(all));
+  } catch {
+    // Out of storage quota — high-resolution captures add up. Keep the signature
+    // usable for this session rather than failing to place it.
+  }
   return all;
 }
 
